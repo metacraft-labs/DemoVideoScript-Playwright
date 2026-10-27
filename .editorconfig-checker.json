@@ -1,0 +1,7 @@
+{
+  "//": "Indentation is checked by the languages' own tools (nimpretty-style review, nixfmt, prettier, Python); aligned continuation lines are not multiples of indent_size. The schema fixtures are excluded because some of them are wrong on purpose (a tab used for indentation, an unterminated string).",
+  "Disable": {
+    "Indentation": true
+  },
+  "Exclude": ["^tests/schema/invalid/", "__pycache__"]
+}

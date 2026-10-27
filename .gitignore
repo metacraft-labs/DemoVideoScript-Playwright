@@ -1,6 +1,6 @@
 node_modules/
-dist/
 build/
 .direnv/
 result
 result-*
+__pycache__/

@@ -1,0 +1,16 @@
+<!doctype html>
+<html lang="en">
+  <head><meta charset="utf-8" /><title>Slow redraw</title></head>
+  <body>
+    <!-- Answers each key in three bursts, 100 ms apart: "a", "ab", "abc". -->
+    <div id="text">ready</div>
+    <script>
+      const t = document.getElementById("text");
+      document.addEventListener("keydown", () => {
+        t.textContent = "a";
+        setTimeout(() => (t.textContent = "ab"), 100);
+        setTimeout(() => (t.textContent = "abc"), 200);
+      });
+    </script>
+  </body>
+</html>

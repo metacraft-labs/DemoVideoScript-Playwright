@@ -1,0 +1,9 @@
+{
+  "name": "demo-video-script-playwright",
+  "version": "0.1.0",
+  "description": "The DemoVideoScript scenario arm for web and Electron applications, through Playwright",
+  "license": "Apache-2.0",
+  "type": "module",
+  "private": true,
+  "engines": { "node": ">=24" }
+}

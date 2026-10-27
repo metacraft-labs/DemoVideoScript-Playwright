@@ -1,0 +1,51 @@
+# The MCL Standard Hook Set (`mcl-standard-hooks`), portable committed form,
+# adopted in full: this repository started with it, so no file predates it.
+#
+# The flake provides the tools (prek, editorconfig-checker, nixfmt, prettier);
+# this file provides the rules. The dev shell installs it as the git hooks
+# (scripts/install-git-hooks.sh). Elsewhere: `prek install --install-hooks`.
+# On NixOS `uv` must be on PATH first; the dev shell provides it.
+
+minimum_pre_commit_version: "3.0.0"
+
+repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v6.0.0
+    hooks:
+      # 1024 KB, passed explicitly because upstream's default is 500 KB.
+      - id: check-added-large-files
+        args: ["--maxkb=1024"]
+      - id: end-of-file-fixer
+
+  - repo: https://github.com/metacraft-labs/devops-modules
+    rev: 571c44be3fb2e8c096cfb5848fffb79a6347a943
+    hooks:
+      - id: ban-added-ct-recordings
+
+  - repo: local
+    hooks:
+      - id: editorconfig-checker
+        name: editorconfig-checker
+        entry: editorconfig-checker
+        language: system
+        types: [file]
+
+      - id: nixfmt
+        name: nixfmt
+        entry: nixfmt
+        language: system
+        files: \.nix$
+
+      - id: terraform-format
+        name: terraform-format
+        description: Format Terraform/OpenTofu HCL files
+        entry: tofu fmt
+        language: system
+        types: [file]
+        files: \.(tf|tftest\.hcl)$
+
+      - id: prettier
+        name: prettier
+        entry: prettier --check --list-different=false --log-level=warn --ignore-unknown --write
+        language: system
+        types: [text]

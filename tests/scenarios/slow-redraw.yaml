@@ -1,0 +1,10 @@
+scenario: 1
+name: playwright/slow-redraw
+pack: slow
+stage:
+  - use: launch-slow
+steps:
+  - key: x
+  - expect: { at: screen, text: abc }
+  - key: y
+  - expect: { at: screen, text: abc }

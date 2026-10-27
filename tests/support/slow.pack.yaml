@@ -1,0 +1,8 @@
+pack: 1
+name: slow
+root: screen
+roles:
+  screen:
+    properties: { text: text }
+stages:
+  launch-slow: ~
