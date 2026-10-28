@@ -25,6 +25,8 @@ export interface ArmContext {
   base: string;
   state: Record<string, unknown>;
   videoDir: string;
+  /** When the page's video began (epoch ms): Playwright starts it as the page is created. */
+  videoStartedAt: number;
   /** Opens the application's page: a new context that records video. */
   open(url: string, init?: { script?: string | ((arg: any) => void); arg?: unknown; width?: number; height?: number }): Promise<Page>;
 }
@@ -95,6 +97,7 @@ export class Arm {
     this.ctx = {
       browser: undefined, context: undefined, page: undefined, base: ".", state: {},
       videoDir: "",
+      videoStartedAt: 0,
       async open(url, init) {
         self.ctx.browser ??= await self.chromium.launch();
         const width = init?.width ?? 1024;
@@ -105,6 +108,7 @@ export class Arm {
           recordVideo: { dir: self.ctx.videoDir, size: { width, height } },
         });
         const page = await self.ctx.context.newPage();
+        self.ctx.videoStartedAt = Date.now();
         if (init?.script) await page.addInitScript(init.script as any, init.arg);
         await page.goto(url);
         self.ctx.page = page;
@@ -356,9 +360,14 @@ export class Arm {
         const out = join(rec.dir, "session.webm");
         mkdirSync(rec.dir, { recursive: true });
         copyFileSync(await video.path(), out);
+        // the video starts when the application's page was opened, before the
+        // steps: `leadMs` is how far into the video the recording began, so a
+        // step's offset in the video is leadMs + (its startMs - recordingStartMs)
         writeFileSync(join(rec.dir, "session.video.json"),
           JSON.stringify({ note: "the video starts when the application was opened, before the steps",
-                           recordingStartedAt: rec.startedAt }) + "\n");
+                           videoStartedAt: this.ctx.videoStartedAt,
+                           recordingStartedAt: rec.startedAt,
+                           leadMs: rec.startedAt - this.ctx.videoStartedAt }) + "\n");
         return { files: [out] };
       }
     }

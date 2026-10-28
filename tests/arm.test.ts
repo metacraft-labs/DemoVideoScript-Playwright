@@ -32,6 +32,10 @@ test("a realistic run records a playable video and a still per step", { timeout:
     const m = JSON.parse(readFileSync(join(dir, "manifest.json"), "utf8"));
     assert.equal(m.outcome, "passed");
     assert.deepEqual(m.media, [video]);
+    // where the recording begins in the video, so a step's offset in it is known
+    const v = JSON.parse(readFileSync(join(dir, "session.video.json"), "utf8"));
+    assert.ok(v.videoStartedAt > 0 && v.recordingStartedAt >= v.videoStartedAt, JSON.stringify(v));
+    assert.equal(v.leadMs, v.recordingStartedAt - v.videoStartedAt);
     for (const s of m.steps) {
       const png = join(dir, "steps", `${s.index}-${s.kind}.png`);
       assert.ok(existsSync(png), png);
