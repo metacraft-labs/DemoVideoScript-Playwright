@@ -1,4 +1,4 @@
 # DemoVideoScript provides the runner the arm is qualified through, the
 # protocol schema its types are generated from, and the conformance
 # application; pinned to an exact commit.
-DemoVideoScript=8e0e0ce8f5681e8b5bf402f01ff0fa744703f3af  # DemoVideoScript@agents
+DemoVideoScript=989b9c744344778eee20f74a62840345c25171f6  # DemoVideoScript@agents: recordings, lanes, documentation captures

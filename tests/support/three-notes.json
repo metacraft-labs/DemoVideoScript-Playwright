@@ -1,0 +1,7 @@
+{
+  "notes": [
+    { "title": "Taxes", "body": ["File by April"], "tags": ["home", "money"] },
+    { "title": "Groceries", "body": ["milk", "eggs", "bread"], "tags": ["home"] },
+    { "title": "Recipes", "body": ["pancakes"], "tags": ["food"] }
+  ]
+}

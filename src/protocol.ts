@@ -42,7 +42,7 @@ export type ResponseHello = {
   "backend": string;
   "version"?: string;
   "platform"?: "linux" | "macos" | "windows";
-  "capabilities": Array<"input.key" | "input.chord" | "input.text" | "input.pointer.move" | "input.pointer.click" | "input.pointer.drag" | "input.wheel" | "input.hover" | "observe.text" | "observe.geometry" | "observe.style" | "observe.image" | "observe.focus" | "sync.event" | "sync.visual-settle" | "record.cast" | "record.video" | "record.still">;
+  "capabilities": Array<"input.key" | "input.chord" | "input.text" | "input.pointer.move" | "input.pointer.click" | "input.pointer.drag" | "input.wheel" | "input.hover" | "observe.text" | "observe.geometry" | "observe.style" | "observe.image" | "observe.focus" | "sync.event" | "sync.visual-settle" | "record.cast" | "record.video" | "record.still" | "record.mask">;
   "bindings"?: {
     [key: string]: unknown;
   } | null;
@@ -105,6 +105,9 @@ export type Request = {
   "use": string;
   "with": {
     "$base"?: string;
+    "$env"?: {
+      [key: string]: string;
+    };
   };
 } | {
   "id": number;
@@ -144,6 +147,9 @@ export type Request = {
   "instance"?: string;
   "step"?: number;
   "kind"?: string;
+  "virtualMs"?: number;
+  "deterministic"?: boolean;
+  "mask"?: Array<string>;
 } | {
   "id": number;
   "call": "hit";

@@ -4,7 +4,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { execFileSync, spawnSync } from "node:child_process";
-import { existsSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -39,6 +39,29 @@ test("a realistic run records a playable video and a still per step", { timeout:
     }
   } finally {
     rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("a failing run leaves its recording under the build directory", { timeout: 600_000 }, () => {
+  const build = mkdtempSync(join(tmpdir(), "dvs-pw-fail-"));
+  try {
+    const r = spawnSync(dvs, ["run", join(root, "tests/scenarios/broken-expectation.yaml"), "--pack", pack,
+      "--backend", arm], { encoding: "utf8", timeout: 600_000, env: { ...process.env, BUILD_DIR: build } });
+    assert.equal(r.status, 1, r.stdout + r.stderr);
+    const group = join(build, "scenario-runs", "playwright-broken-expectation", "playwright");
+    const runs = readdirSync(group);
+    assert.equal(runs.length, 1);
+    const dir = join(group, runs[0]);
+    assert.ok(r.stdout.includes(`recording: ${dir}`), r.stdout);
+    const m = JSON.parse(readFileSync(join(dir, "manifest.json"), "utf8"));
+    assert.equal(m.outcome, "failed");
+    assert.equal(m.runId, runs[0]);
+    for (const f of ["steps/1-state.json", "steps/1-key.png", "steps/2-state.json", "failure/observation.json",
+      "failure/surface.png", "failure/backend.log", "session.webm"]) {
+      assert.ok(existsSync(join(dir, f)), f);
+    }
+  } finally {
+    rmSync(build, { recursive: true, force: true });
   }
 });
 

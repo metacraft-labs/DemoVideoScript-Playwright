@@ -1,0 +1,11 @@
+scenario: 1
+name: playwright/broken-expectation
+pack: notes-app
+summary: An expectation that does not hold, so the run fails at step 2.
+stage:
+  - use: seed-notes
+    with: { fixture: ../support/three-notes.json }
+  - use: launch-app
+steps:
+  - key: Down
+  - expect: { at: note-list, count: 7 }

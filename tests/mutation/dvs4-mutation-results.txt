@@ -1,33 +1,33 @@
-# dvs4 mutation results — 2026-10-28 00:37:37 +0200
+# dvs4 mutation results — 2026-10-28 19:31:47 +0200
 # kill command: bash -c just lint-types lint-input-rule && just build test-arm && just test-conformance test-protocol
 
-KILLED   P1       59.8s  a locator resolving the first of several candidates instead of reporting ambiguity
-           | cp ../dvs-core/conformance/app/web/index.html $BUILD_DIR/web/index.html
-           | DVS_NOTES_WEB=$BUILD_DIR/web DVS_BIN=$BUILD_DIR/bin/dvs DVS_ROOT=../dvs-core node --test tests/*.test.ts
+KILLED   P1       35.9s  a locator resolving the first of several candidates instead of reporting ambiguity
+           | cp ../dvs-core7c/conformance/app/web/index.html $BUILD_DIR/web/index.html
+           | DVS_NOTES_WEB=$BUILD_DIR/web DVS_BIN=$BUILD_DIR/bin/dvs DVS_ROOT=../dvs-core7c node --test tests/*.test.ts
            | error: Recipe `test-arm` failed on line 52 with exit code 1
-KILLED   P2      456.8s  a click's modifiers dropped
-           | DVS_NOTES_WEB=$BUILD_DIR/web DVS_BIN=$BUILD_DIR/bin/dvs DVS_ROOT=../dvs-core node --test tests/*.test.ts
-           | DVS_NOTES_WEB=$BUILD_DIR/web $BUILD_DIR/bin/dvs conformance --pack ../dvs-core/conformance/pack/notes-app.pack.yaml --backend "cmd:node ../dvs-pw/src/main.ts --
+KILLED   P2      183.1s  a click's modifiers dropped
+           | DVS_NOTES_WEB=$BUILD_DIR/web DVS_BIN=$BUILD_DIR/bin/dvs DVS_ROOT=../dvs-core7c node --test tests/*.test.ts
+           | DVS_NOTES_WEB=$BUILD_DIR/web $BUILD_DIR/bin/dvs conformance --pack ../dvs-core7c/conformance/pack/notes-app.pack.yaml --backend "cmd:node ../dvs-pw7/src/main.ts
            | error: Recipe `test-conformance` failed on line 45 with exit code 1
-KILLED   P3       62.2s  a stale read: the page is not re-read
-           | cp ../dvs-core/conformance/app/web/index.html $BUILD_DIR/web/index.html
-           | DVS_NOTES_WEB=$BUILD_DIR/web DVS_BIN=$BUILD_DIR/bin/dvs DVS_ROOT=../dvs-core node --test tests/*.test.ts
+KILLED   P3       14.0s  a stale read: the page is not re-read
+           | cp ../dvs-core7c/conformance/app/web/index.html $BUILD_DIR/web/index.html
+           | DVS_NOTES_WEB=$BUILD_DIR/web DVS_BIN=$BUILD_DIR/bin/dvs DVS_ROOT=../dvs-core7c node --test tests/*.test.ts
            | error: Recipe `test-arm` failed on line 52 with exit code 1
-KILLED   P4        7.0s  the protocol types drifting from the schema
-           | node scripts/gen-protocol-types.ts ../dvs-core/schemas/v1/backend-protocol.schema.json --check
+KILLED   P4        2.7s  the protocol types drifting from the schema
+           | node scripts/gen-protocol-types.ts ../dvs-core7c/schemas/v1/backend-protocol.schema.json --check
            | src/protocol.ts is stale: run scripts/gen-protocol-types.ts
            | error: Recipe `lint-types` failed on line 59 with exit code 1
-KILLED   P5        3.9s  script injection on the send path
+KILLED   P5        3.2s  script injection on the send path
            | node scripts/check-input-rule.ts
            | script injection on the send path: line 177: await page.evaluate(() => 0);
            | error: Recipe `lint-input-rule` failed on line 62 with exit code 1
-KILLED   P6       79.4s  settled after one quiet window: before the page stopped changing
-           | cp ../dvs-core/conformance/app/web/index.html $BUILD_DIR/web/index.html
-           | DVS_NOTES_WEB=$BUILD_DIR/web DVS_BIN=$BUILD_DIR/bin/dvs DVS_ROOT=../dvs-core node --test tests/*.test.ts
+KILLED   P6       29.7s  settled after one quiet window: before the page stopped changing
+           | cp ../dvs-core7c/conformance/app/web/index.html $BUILD_DIR/web/index.html
+           | DVS_NOTES_WEB=$BUILD_DIR/web DVS_BIN=$BUILD_DIR/bin/dvs DVS_ROOT=../dvs-core7c node --test tests/*.test.ts
            | error: Recipe `test-arm` failed on line 52 with exit code 1
-KILLED   P6b     103.0s  settled reported at once
-           | cp ../dvs-core/conformance/app/web/index.html $BUILD_DIR/web/index.html
-           | DVS_NOTES_WEB=$BUILD_DIR/web DVS_BIN=$BUILD_DIR/bin/dvs DVS_ROOT=../dvs-core node --test tests/*.test.ts
+KILLED   P6b      24.3s  settled reported at once
+           | cp ../dvs-core7c/conformance/app/web/index.html $BUILD_DIR/web/index.html
+           | DVS_NOTES_WEB=$BUILD_DIR/web DVS_BIN=$BUILD_DIR/bin/dvs DVS_ROOT=../dvs-core7c node --test tests/*.test.ts
            | error: Recipe `test-arm` failed on line 52 with exit code 1
 
 7/7 killed, 0 survived
