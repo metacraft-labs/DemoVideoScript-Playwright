@@ -41,6 +41,14 @@ export interface Binding {
   anchor?(ctx: ArmContext, n: SurfaceNode, anchor: string): Promise<{ x: number; y: number } | undefined>;
   /** One cell or pixel, in the page's units: what the off-by-one arm moves by. */
   unit?: number;
+  /**
+   * Closes what the binding's stages started, when that is not a page the arm
+   * opened (an Electron application started with Playwright's Electron
+   * driver, say). Called when a recording stops — so the page's video is
+   * complete before it is copied — and when the arm shuts down. Without it
+   * the arm closes the browser context it opened.
+   */
+  close?(ctx: ArmContext): Promise<void>;
 }
 
 const CAPABILITIES = [
@@ -354,12 +362,13 @@ export class Arm {
         this.recording = undefined;
         if (!rec || !this.ctx.page) return { files: [] };
         const video = this.ctx.page.video();
-        await this.ctx.context?.close();
+        await this.closeApplication();
         this.ctx.page = undefined;
         if (!video) return { files: [] };
+        const source = await video.path();
         const out = join(rec.dir, "session.webm");
         mkdirSync(rec.dir, { recursive: true });
-        copyFileSync(await video.path(), out);
+        copyFileSync(source, out);
         // the video starts when the application's page was opened, before the
         // steps: `leadMs` is how far into the video the recording began, so a
         // step's offset in the video is leadMs + (its startMs - recordingStartMs)
@@ -374,8 +383,18 @@ export class Arm {
     throw new BackendError("protocol", `unknown record op '${req.op}'`);
   }
 
+  private closed = false;
+
+  /** The application the stages opened: the binding's own close, or the context. */
+  private async closeApplication(): Promise<void> {
+    if (this.closed) return;
+    this.closed = true;
+    if (this.binding.close) await this.binding.close(this.ctx).catch(() => {});
+    else await this.ctx.context?.close().catch(() => {});
+  }
+
   async close(): Promise<void> {
-    await this.ctx.context?.close().catch(() => {});
+    await this.closeApplication();
     await this.ctx.browser?.close().catch(() => {});
   }
 }
