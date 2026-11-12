@@ -72,8 +72,16 @@ export type LocateResult =
   | { outcome: "one"; instance: string; role: string }
   | { outcome: "none" | "ambiguous"; candidates: string[] };
 
+/**
+ * An instance is identified by its path of keys from the root: at each level
+ * its `keyText` and its place among the siblings that share it. A later read
+ * of the page finds it again by that path, so a node drawn, or removed,
+ * beside it between `locate` and `read` does not move it onto another node.
+ */
+type Step = { key: string; nth: number };
+
 export class SurfaceIndex {
-  private ids = new Map<string, number[]>();
+  private ids = new Map<string, Step[]>();
   private next = 0;
 
   clear(): void {
@@ -83,8 +91,16 @@ export class SurfaceIndex {
   register(root: SurfaceNode, n: SurfaceNode): string {
     const path: number[] = [];
     pathTo(root, n, path);
+    const steps: Step[] = [];
+    let cur = root;
+    for (const i of path) {
+      const key = keyText(cur.children[i]);
+      const nth = cur.children.slice(0, i).filter((c) => keyText(c) === key).length;
+      steps.push({ key, nth });
+      cur = cur.children[i];
+    }
     const id = `i${++this.next}`;
-    this.ids.set(id, path);
+    this.ids.set(id, steps);
     return id;
   }
 
@@ -92,7 +108,7 @@ export class SurfaceIndex {
     const path = this.ids.get(id);
     if (!path) throw new BackendError("not-found", `no instance ${id}`);
     let n: SurfaceNode | undefined = root;
-    for (const i of path) n = n?.children[i];
+    for (const { key, nth } of path) n = n?.children.filter((c) => keyText(c) === key)[nth];
     if (!n) throw new BackendError("not-found", `instance ${id} is gone`);
     return n;
   }
