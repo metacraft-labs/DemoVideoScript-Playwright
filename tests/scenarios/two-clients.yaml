@@ -1,0 +1,35 @@
+scenario: 1
+name: playwright/two-clients
+pack: notes-app
+summary: >-
+  Two clients of the notes application's web build: one in a second browser
+  (separate) and a duplicated tab. Archiving in one leaves the others as they
+  were; a reload starts a client again; each client is recorded on its own.
+stage:
+  - use: seed-notes
+    with: { fixture: ../support/three-notes.json }
+  - use: launch-app
+clients:
+  a: { open: stage }
+  b: { open: notes-window, isolation: separate }
+steps:
+  - expect: { at: note-list, count: 3 }
+    as: b
+  - beat: archive-in-a
+    as: a
+    steps:
+      - click: 'note-list/note[title="Groceries"]'
+      - chord: { bound: "notes.archive-selected" }
+      - wait: { until: "note-list.loaded" }
+      - expect: { at: note-list, count: 2 }
+  - expect: { at: note-list, count: 3, holds: 500ms }
+    as: b
+  - duplicate: { client: a, name: c }
+  - expect: { at: note-list, count: 3 }
+    as: c
+  - reload: a
+  - expect: { at: note-list, count: 3 }
+    as: a
+  - close-client: c
+  - expect: { at: note-list, count: 3 }
+    as: b

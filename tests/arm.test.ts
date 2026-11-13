@@ -46,6 +46,27 @@ test("a realistic run records a playable video and a still per step", { timeout:
   }
 });
 
+test("two clients: steps reach the client they name, and each client is recorded", { timeout: 600_000 }, () => {
+  const dir = mkdtempSync(join(tmpdir(), "dvs-pw-clients-"));
+  try {
+    const r = run(["run", join(root, "tests/scenarios/two-clients.yaml"), "--pack", pack, "--backend", arm,
+      "--record", "always", "--out", dir]);
+    assert.equal(r.status, 0, r.stdout + r.stderr);
+    const m = JSON.parse(readFileSync(join(dir, "manifest.json"), "utf8"));
+    assert.equal(m.outcome, "passed");
+    assert.ok(m.backend.capabilities.includes("client.multi"));
+    // a, b and the duplicated tab c each have a video
+    for (const c of ["a", "b", "c"]) {
+      const video = join(dir, `session.${c}.webm`);
+      assert.ok(statSync(video).size > 1_000, video);
+      assert.deepEqual([...readFileSync(video).subarray(0, 4)], [0x1a, 0x45, 0xdf, 0xa3]);
+    }
+    assert.deepEqual(m.steps.slice(0, 2).map((s: any) => s.client), ["b", "a"]);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
 test("a failing run leaves its recording under the build directory", { timeout: 600_000 }, () => {
   const build = mkdtempSync(join(tmpdir(), "dvs-pw-fail-"));
   try {

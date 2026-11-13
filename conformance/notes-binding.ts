@@ -83,6 +83,7 @@ const binding: Binding = {
         const w = Number(args.width ?? 60);
         const h = Number(args.height ?? 16);
         const url = pathToFileURL(resolve(webDir(), "index.html")).href + `?w=${w}&h=${h}`;
+        ctx.state.url = url;
         const page = await ctx.open(url, {
           script: (f: string) => { (window as any).DVS_FIXTURE = f; },
           arg: ctx.state.fixture ?? "",
@@ -102,6 +103,24 @@ const binding: Binding = {
       }
     }
     throw new Error(`no stage procedure '${use}'`);
+  },
+
+  // `notes-window`: one more window of the application on the seeded notes.
+  // A separate client is a second browser (its own context); a shared one is
+  // a second tab of the first's.
+  async openClient(ctx, kind, isolation) {
+    if (kind !== "notes-window") throw new Error(`no client kind '${kind}'`);
+    let context = ctx.context!;
+    if (isolation === "separate") {
+      const vp = ctx.page!.viewportSize() ?? { width: 640, height: 340 };
+      context = await ctx.browser!.newContext({ viewport: vp, recordVideo: { dir: ctx.videoDir, size: vp } });
+      await context.addInitScript((f: string) => { (window as any).DVS_FIXTURE = f; },
+                                  (ctx.state.fixture as string) ?? "");
+    }
+    const page = await context.newPage();
+    await page.goto(String(ctx.state.url));
+    await page.waitForSelector('[data-role="window"]');
+    return page;
   },
 
   async surface(ctx) {

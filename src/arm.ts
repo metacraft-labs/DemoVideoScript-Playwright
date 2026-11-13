@@ -49,6 +49,24 @@ export interface Binding {
    * the arm closes the browser context it opened.
    */
   close?(ctx: ArmContext): Promise<void>;
+  /**
+   * Opens one more client of the application (a scenario's `clients:` or
+   * `open-client`): `kind` is the pack's client kind, `isolation` what it
+   * shares with the others. Returns its page. Without it the arm opens the
+   * address of the client open now: in a new browser context for `separate`
+   * (nothing shared, as a second browser), in the same context for `shared`
+   * (as a second tab).
+   */
+  openClient?(ctx: ArmContext, kind: string, isolation: "separate" | "shared"): Promise<Page>;
+}
+
+/** One client of the application: a page, and the context it lives in. */
+interface Client {
+  page: Page;
+  context: BrowserContext | undefined;
+  videoStartedAt: number;
+  /** A context the arm opened for this client, closed with it. */
+  ownContext: boolean;
 }
 
 const CAPABILITIES = [
@@ -56,6 +74,8 @@ const CAPABILITIES = [
   "input.pointer.drag", "input.wheel", "input.hover",
   "observe.text", "observe.geometry", "observe.focus", "sync.event", "sync.visual-settle",
   "record.video", "record.still",
+  "client.multi", "client.reload", "client.duplicate",
+  "client.isolation.separate", "client.isolation.shared",
 ];
 
 const KEYS: Record<string, string> = {
@@ -92,6 +112,7 @@ export class Arm {
   private stageClosed = false;
   private held = new Set<string>();
   private recording: { dir: string; startedAt: number } | undefined;
+  private clients = new Map<string, Client>();
   readonly ctx: ArmContext;
   private binding: Binding;
   private defect: Defect;
@@ -117,7 +138,9 @@ export class Arm {
         });
         const page = await self.ctx.context.newPage();
         self.ctx.videoStartedAt = Date.now();
-        if (init?.script) await page.addInitScript(init.script as any, init.arg);
+        // on the context, so every page of the application gets it: a second
+        // tab (a shared client, a duplicated one) as well as the first
+        if (init?.script) await self.ctx.context.addInitScript(init.script as any, init.arg);
         await page.goto(url);
         self.ctx.page = page;
         return page;
@@ -336,12 +359,141 @@ export class Arm {
         return await this.record(req);
       case "hit":
         return { locator: hit(await this.refresh(), req.x, req.y) };
+      case "client":
+        await this.client(req);
+        return {};
       case "shutdown":
         await this.close();
         return {};
       default:
         throw new BackendError("protocol", `unknown call '${req.call}'`);
     }
+  }
+
+  // --- clients ----------------------------------------------------------------
+  // What a person does to a client as a whole: open one more, reload it,
+  // duplicate it, close it. The calls after `select` are that client's.
+  private use(name: string): Client {
+    const c = this.clients.get(name);
+    if (!c) throw new BackendError("not-found", `no client '${name}'`);
+    return c;
+  }
+
+  private async client(req: any): Promise<void> {
+    const name: string = req.name;
+    switch (req.op) {
+      case "adopt":
+        this.stageContext = this.ctx.context;
+        this.clients.set(name, { page: this.page(), context: this.ctx.context,
+                                 videoStartedAt: this.ctx.videoStartedAt, ownContext: false });
+        return;
+      case "open": {
+        const isolation = req.isolation === "shared" ? "shared" : "separate";
+        let page: Page;
+        let ownContext = false;
+        if (this.binding.openClient) {
+          page = await this.binding.openClient(this.ctx, req.open, isolation);
+        } else {
+          const url = this.page().url();
+          if (isolation === "shared") {
+            if (!this.ctx.context) throw new BackendError("unsupported", "no context to open a tab in");
+            page = await this.ctx.context.newPage();
+          } else {
+            this.ctx.browser ??= await this.chromium.launch();
+            const vp = this.page().viewportSize() ?? { width: 1024, height: 600 };
+            const context = await this.ctx.browser!.newContext({
+              viewport: vp, recordVideo: { dir: this.ctx.videoDir || join(process.env.TMPDIR ?? "/tmp",
+                `dvs-pw-video-${process.pid}-${Date.now()}`), size: vp } });
+            page = await context.newPage();
+            ownContext = true;
+          }
+          await page.goto(url);
+        }
+        this.clients.set(name, { page, context: page.context(), videoStartedAt: Date.now(), ownContext });
+        return;
+      }
+      case "duplicate": {
+        // what a browser's "Duplicate" does: a second tab of the same browser
+        // whose session storage starts as a copy of the original's
+        const from = this.use(req.from);
+        const storage: Record<string, string> = await from.page.evaluate(() => {
+          const o: Record<string, string> = {};
+          for (let k = 0; k < sessionStorage.length; k++) {
+            const key = sessionStorage.key(k)!;
+            o[key] = sessionStorage.getItem(key)!;
+          }
+          return o;
+        });
+        const page = await from.page.context().newPage();
+        await page.addInitScript((seed: Record<string, string>) => {
+          // only into the tab's first document: its own reloads keep its own
+          if (sessionStorage.length === 0) {
+            for (const [k, v] of Object.entries(seed)) sessionStorage.setItem(k, v);
+          }
+        }, storage);
+        await page.goto(from.page.url());
+        this.clients.set(name, { page, context: page.context(), videoStartedAt: Date.now(), ownContext: false });
+        return;
+      }
+      case "select": {
+        const c = this.use(name);
+        this.ctx.page = c.page;
+        this.ctx.context = c.context;
+        this.idx.clear();
+        this.tree = undefined;
+        this.before = undefined;
+        return;
+      }
+      case "reload": {
+        await this.use(name).page.reload();
+        this.idx.clear();
+        return;
+      }
+      case "close": {
+        const c = this.use(name);
+        this.clients.delete(name);
+        if (this.ctx.page === c.page) this.ctx.page = undefined;
+        this.closedVideos.push({ name, client: c, video: c.page.video() });
+        await c.page.close().catch(() => {});
+        if (c.ownContext) await c.context?.close().catch(() => {});
+        this.idx.clear();
+        return;
+      }
+    }
+    throw new BackendError("protocol", `unknown client op '${req.op}'`);
+  }
+
+  private stageContext: BrowserContext | undefined;
+  private closedVideos: Array<{ name: string; client: Client; video: ReturnType<Page["video"]> }> = [];
+
+  /**
+   * Each client's video, as session.<client>.webm with its own timing file.
+   * A page's video is complete only once the page has closed, so every client
+   * closes first (the application the stage started last, by its own close).
+   */
+  private async clientVideos(rec: { dir: string; startedAt: number }): Promise<string[]> {
+    const all = [...this.clients.entries()].map(([name, client]) => ({ name, client, video: client.page.video() }));
+    const stagePage = this.ctx.page;
+    for (const c of all) {
+      if (c.client.ownContext) await c.client.context?.close().catch(() => {});
+      else if (c.client.page !== stagePage) await c.client.page.close().catch(() => {});
+    }
+    await this.closeApplication();
+    const files: string[] = [];
+    mkdirSync(rec.dir, { recursive: true });
+    for (const { name, client, video } of [...all, ...this.closedVideos]) {
+      if (!video) continue;
+      const source = await video.path().catch(() => "");
+      if (!source) continue;
+      const out = join(rec.dir, `session.${name}.webm`);
+      try { copyFileSync(source, out); } catch { continue; }
+      writeFileSync(join(rec.dir, `session.${name}.video.json`),
+        JSON.stringify({ client: name, videoStartedAt: client.videoStartedAt,
+                         recordingStartedAt: rec.startedAt,
+                         leadMs: rec.startedAt - client.videoStartedAt }) + "\n");
+      files.push(out);
+    }
+    return files;
   }
 
   private async record(req: any): Promise<{ files: string[] }> {
@@ -360,6 +512,15 @@ export class Arm {
       case "stop": {
         const rec = this.recording;
         this.recording = undefined;
+        if (rec && this.clients.size > 0) {
+          // more than one client: one video per client, the stage's own too.
+          // The stage's application is the page the binding's close closes.
+          const adopted = [...this.clients.values()].find((c) => !c.ownContext && c.context === this.stageContext);
+          if (adopted) { this.ctx.page = adopted.page; this.ctx.context = adopted.context; }
+          const files = await this.clientVideos(rec);
+          this.ctx.page = undefined;
+          return { files };
+        }
         if (!rec || !this.ctx.page) return { files: [] };
         const video = this.ctx.page.video();
         await this.closeApplication();
@@ -394,6 +555,9 @@ export class Arm {
   }
 
   async close(): Promise<void> {
+    for (const c of this.clients.values()) {
+      if (c.ownContext) await c.context?.close().catch(() => {});
+    }
     await this.closeApplication();
     await this.ctx.browser?.close().catch(() => {});
   }
