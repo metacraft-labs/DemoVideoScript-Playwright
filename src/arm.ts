@@ -103,11 +103,12 @@ function pwChord(chord: string): string {
   return parts.map((p, i) => (i < parts.length - 1 ? KEYS[p] ?? p : pwKey(p))).join("+");
 }
 
-// Opening, duplicating or reloading a client returns once its document has
-// loaded; whether the application in it is ready is the scenario's to wait
-// for (an application can take far longer than Playwright's 30 s default to
-// fire "load" on a loaded machine).
-const OPEN_WAIT = { waitUntil: "domcontentloaded" as const, timeout: 600_000 };
+// Opening, duplicating or reloading a client waits for the page's load event,
+// as a person waits for the tab to stop loading, with a limit far above
+// Playwright's 30 s default: an application that starts a replay per client
+// can take minutes to finish loading on a loaded machine. Whether the
+// application in it is ready is the scenario's to wait for.
+const OPEN_WAIT = { waitUntil: "load" as const, timeout: 600_000 };
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, Math.max(0, ms)));
 
