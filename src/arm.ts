@@ -103,6 +103,12 @@ function pwChord(chord: string): string {
   return parts.map((p, i) => (i < parts.length - 1 ? KEYS[p] ?? p : pwKey(p))).join("+");
 }
 
+// Opening, duplicating or reloading a client returns once its document has
+// loaded; whether the application in it is ready is the scenario's to wait
+// for (an application can take far longer than Playwright's 30 s default to
+// fire "load" on a loaded machine).
+const OPEN_WAIT = { waitUntil: "domcontentloaded" as const, timeout: 600_000 };
+
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, Math.max(0, ms)));
 
 function parseDuration(s: string): number {
@@ -424,7 +430,7 @@ export class Arm {
             page = await context.newPage();
             ownContext = true;
           }
-          await page.goto(url);
+          await page.goto(url, OPEN_WAIT);
         }
         this.clients.set(name, { page, context: page.context(), videoStartedAt: Date.now(), ownContext });
         return;
@@ -448,7 +454,7 @@ export class Arm {
             for (const [k, v] of Object.entries(seed)) sessionStorage.setItem(k, v);
           }
         }, storage);
-        await page.goto(from.page.url());
+        await page.goto(from.page.url(), OPEN_WAIT);
         this.clients.set(name, { page, context: page.context(), videoStartedAt: Date.now(), ownContext: false });
         return;
       }
@@ -462,7 +468,7 @@ export class Arm {
         return;
       }
       case "reload": {
-        await this.use(name).page.reload();
+        await this.use(name).page.reload(OPEN_WAIT);
         this.idx.clear();
         return;
       }
