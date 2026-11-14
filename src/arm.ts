@@ -58,6 +58,13 @@ export interface Binding {
    * (as a second tab).
    */
   openClient?(ctx: ArmContext, kind: string, isolation: "separate" | "shared"): Promise<Page>;
+  /**
+   * An `act` step (DemoVideoScript-pm Proposal-Outside-Actions.md): a change
+   * outside the application, by the pack's action name and its arguments —
+   * another program writing a file, a second process of the product. Never
+   * the application's own state. Without it the arm does not offer `act`.
+   */
+  act?(ctx: ArmContext, use: string, args: Record<string, unknown>): Promise<void>;
 }
 
 /** One client of the application: a page, and the context it lives in. */
@@ -82,7 +89,7 @@ const KEYS: Record<string, string> = {
   Enter: "Enter", Esc: "Escape", Tab: "Tab", Backspace: "Backspace", Delete: "Delete",
   Insert: "Insert", Home: "Home", End: "End", PageUp: "PageUp", PageDown: "PageDown",
   Up: "ArrowUp", Down: "ArrowDown", Left: "ArrowLeft", Right: "ArrowRight", Space: " ",
-  Plus: "+", Ctrl: "Control", Shift: "Shift", Alt: "Alt", Meta: "Meta",
+  Plus: "+", Menu: "ContextMenu", Ctrl: "Control", Shift: "Shift", Alt: "Alt", Meta: "Meta",
 };
 
 function pwKey(key: string): string {
@@ -308,7 +315,8 @@ export class Arm {
         return {
           backend: "playwright", version: "1", platform: process.platform === "darwin" ? "macos" :
             process.platform === "win32" ? "windows" : "linux",
-          capabilities: CAPABILITIES, bindings: this.binding.roles, units: "px",
+          capabilities: this.binding.act ? [...CAPABILITIES, "act"] : CAPABILITIES,
+          bindings: this.binding.roles, units: "px",
         };
       case "stage":
         if (this.stageClosed) throw new BackendError("stage-closed", `the stage has ended; '${req.use}' cannot run now`);
@@ -361,6 +369,15 @@ export class Arm {
         return { locator: hit(await this.refresh(), req.x, req.y) };
       case "client":
         await this.client(req);
+        return {};
+      case "act":
+        if (!this.binding.act) throw new BackendError("unsupported", "this binding makes no changes outside the application");
+        try {
+          await this.binding.act(this.ctx, req.use, req.with ?? {});
+        } catch (e: any) {
+          if (e instanceof BackendError) throw e;
+          throw new BackendError("refused", `act ${req.use}: ${e?.message ?? e}`);
+        }
         return {};
       case "shutdown":
         await this.close();
