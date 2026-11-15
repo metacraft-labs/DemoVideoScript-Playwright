@@ -1,0 +1,9 @@
+schema = "reprobuild.solved-graph-lock.v3"
+
+[lock]
+platform = "amd64-linux"
+optimal = false
+inputs_digest = "fnv1a64:3dd7202d78437cdc"
+variants = []
+packages = [{ name = "DemoVideoScript", version = "1.0.0", source = "DemoVideoScript", selection = "selected" }, { name = "demo_video_script", version = "0.1.0", source = "demo_video_script", selection = "selected" }, { name = "demo_video_script_playwright", version = "0.1.0", source = "demo_video_script_playwright", selection = "selected" }, { name = "nim", version = "2.0.0", source = "nim", selection = "selected" }]
+deps = [{ name = "DemoVideoScript", coord_kind = "vcs", url = "https://github.com/metacraft-labs/DemoVideoScript", revision = "592bd69903bb4876a0195852c3e7a134fc6b8646", integrity = "git-sha1:592bd69903bb4876a0195852c3e7a134fc6b8646", version = "", visibility = "public", participation = "", depends = "", tags = "" }, { name = "DemoVideoScript-Playwright", self = "true", coord_kind = "vcs", url = "https://github.com/metacraft-labs/DemoVideoScript-Playwright", revision = "0151f77115d48a2e2dd2bfe7e997142b8788025f", integrity = "git-sha1:0151f77115d48a2e2dd2bfe7e997142b8788025f", version = "", visibility = "public", participation = "", depends = "DemoVideoScript", tags = "" }]
