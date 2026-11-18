@@ -142,6 +142,19 @@ test("settled waits for the last of several redraw bursts", { timeout: 300_000 }
   }
 });
 
+test("the stage's page may take longer than 30 s to load", { timeout: 300_000 }, () => {
+  // The page's load event comes 35 s after the navigation (the slow binding's
+  // `launch-slow-load` holds back an image): past Playwright's 30 s default,
+  // which a loaded host reaches with a real application. The run waits for
+  // it, as for a client's open, and passes.
+  const slowArm = `cmd:node ${join(root, "src/main.ts")} --binding ${join(root, "tests/support/slow-binding.ts")}`;
+  const started = Date.now();
+  const r = run(["run", join(root, "tests/scenarios/slow-load.yaml"), "--pack",
+    join(root, "tests/support/slow.pack.yaml"), "--backend", slowArm, "--record", "off"]);
+  assert.equal(r.status, 0, r.stdout + r.stderr);
+  assert.ok(Date.now() - started >= 35_000, "the load event was held back");
+});
+
 test("the protocol types are the schema's: a changed schema makes them stale", { timeout: 60_000 }, () => {
   const schema = JSON.parse(readFileSync(join(dvsRoot, "schemas/v1/backend-protocol.schema.json"), "utf8"));
   execFileSync("node", [join(root, "scripts/gen-protocol-types.ts"),

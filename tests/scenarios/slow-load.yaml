@@ -1,0 +1,8 @@
+scenario: 1
+name: playwright/slow-load
+pack: slow
+stage:
+  - use: launch-slow-load
+steps:
+  - key: x
+  - expect: { at: screen, text: abc }

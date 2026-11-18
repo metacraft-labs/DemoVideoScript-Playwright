@@ -103,7 +103,8 @@ function pwChord(chord: string): string {
   return parts.map((p, i) => (i < parts.length - 1 ? KEYS[p] ?? p : pwKey(p))).join("+");
 }
 
-// Opening, duplicating or reloading a client waits for the page's load event,
+// Opening (the stage's first page as well as a client's), duplicating or
+// reloading a client waits for the page's load event,
 // as a person waits for the tab to stop loading, with a limit far above
 // Playwright's 30 s default: an application that starts a replay per client
 // can take minutes to finish loading on a loaded machine. Whether the
@@ -155,7 +156,7 @@ export class Arm {
         // on the context, so every page of the application gets it: a second
         // tab (a shared client, a duplicated one) as well as the first
         if (init?.script) await self.ctx.context.addInitScript(init.script as any, init.arg);
-        await page.goto(url);
+        await page.goto(url, OPEN_WAIT);
         self.ctx.page = page;
         return page;
       },

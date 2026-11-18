@@ -6,3 +6,4 @@ roles:
     properties: { text: text }
 stages:
   launch-slow: ~
+  launch-slow-load: ~
