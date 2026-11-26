@@ -1,4 +1,4 @@
 # DemoVideoScript provides the runner the arm is qualified through, the
 # protocol schema its types are generated from, and the conformance
 # application; pinned to an exact commit.
-DemoVideoScript=197d512ace3e11ce2c70384bc4262cf8cdc936f8  # DemoVideoScript@agents: act steps and the Menu key
+DemoVideoScript=b2dd47d345794d53966102b7ee151e46f7d52daf  # DemoVideoScript@agents: a client action that loads a page can skip settled
