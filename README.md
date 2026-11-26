@@ -18,8 +18,10 @@ script injection on the send path. Stages may inject scripts (they run before th
 and reads may introspect the page but not change it — the runner reads twice and
 compares.
 
-Recordings are WebM videos (from when the application was opened) and a PNG still per
-step. Message types (`src/protocol.ts`) are generated from DemoVideoScript's published
+A recording is a video of each of the application's pages and a PNG still per step. The
+arm records a page itself, from its screencast: lossless (H.264 RGB at qp 0, in
+Matroska), at the page's own size, each frame shown for as long as it was on screen by
+the wall clock, so the video is as long as the run. It needs `ffmpeg` (or `FFMPEG_BIN`). Message types (`src/protocol.ts`) are generated from DemoVideoScript's published
 schema and checked against it.
 
 ```sh

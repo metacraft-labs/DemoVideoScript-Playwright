@@ -113,7 +113,7 @@ const binding: Binding = {
     let context = ctx.context!;
     if (isolation === "separate") {
       const vp = ctx.page!.viewportSize() ?? { width: 640, height: 340 };
-      context = await ctx.browser!.newContext({ viewport: vp, recordVideo: { dir: ctx.videoDir, size: vp } });
+      context = await ctx.browser!.newContext({ viewport: vp });
       await context.addInitScript((f: string) => { (window as any).DVS_FIXTURE = f; },
                                   (ctx.state.fixture as string) ?? "");
     }

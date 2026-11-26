@@ -19,23 +19,42 @@ function run(args: string[]) {
   return spawnSync(dvs, args, { encoding: "utf8", timeout: 600_000 });
 }
 
+/** One ffprobe entry of a video's first video stream or its container, as CSV. */
+function probe(video: string, entries: string): string {
+  const ffprobe = (process.env.FFMPEG_BIN ?? "ffmpeg").replace(/ffmpeg$/, "ffprobe");
+  const r = spawnSync(ffprobe, ["-v", "error", "-select_streams", "v:0", "-show_entries", entries,
+    "-of", "csv=p=0", video], { encoding: "utf8" });
+  assert.equal(r.status, 0, r.stderr);
+  return r.stdout.trim();
+}
+
 test("a realistic run records a playable video and a still per step", { timeout: 600_000 }, () => {
   const dir = mkdtempSync(join(tmpdir(), "dvs-pw-rec-"));
   try {
     const r = run(["run", join(scenarios, "drag-to-reorder.yaml"), "--pack", pack, "--backend", arm,
       "--mode", "realistic", "--record", "always", "--out", dir]);
     assert.equal(r.status, 0, r.stdout + r.stderr);
-    const video = join(dir, "session.webm");
+    const video = join(dir, "session.mkv");
     assert.ok(statSync(video).size > 10_000, "the video has frames");
-    // a WebM file starts with the EBML magic
+    // a Matroska file starts with the EBML magic
     assert.deepEqual([...readFileSync(video).subarray(0, 4)], [0x1a, 0x45, 0xdf, 0xa3]);
+    // lossless RGB: the page's frames as they were, for the one final encode
+    assert.equal(probe(video, "stream=codec_name,pix_fmt"), "h264,gbrp");
     const m = JSON.parse(readFileSync(join(dir, "manifest.json"), "utf8"));
     assert.equal(m.outcome, "passed");
     assert.deepEqual(m.media, [video]);
     // where the recording begins in the video, so a step's offset in it is known
     const v = JSON.parse(readFileSync(join(dir, "session.video.json"), "utf8"));
-    assert.ok(v.videoStartedAt > 0 && v.recordingStartedAt >= v.videoStartedAt, JSON.stringify(v));
+    assert.ok(v.videoStartedAt > 0 && v.recordingStartedAt > 0, JSON.stringify(v));
     assert.equal(v.leadMs, v.recordingStartedAt - v.videoStartedAt);
+    // the video covers the whole run: every step ends inside it, and it does
+    // not run on far past the last one (it was a third to two thirds of the
+    // run when Playwright's own video was used, on a loaded host)
+    const duration = Number(probe(video, "format=duration")) * 1000;
+    const lastEnd = Math.max(...m.steps.map((s: any) => s.endMs));
+    const lastInVideo = v.leadMs + (lastEnd - m.recordingStartMs);
+    assert.ok(duration >= lastInVideo - 100, `video ${duration} ms, last step ends at ${lastInVideo} ms`);
+    assert.ok(duration <= lastInVideo + 10_000, `video ${duration} ms, last step ends at ${lastInVideo} ms`);
     for (const s of m.steps) {
       const png = join(dir, "steps", `${s.index}-${s.kind}.png`);
       assert.ok(existsSync(png), png);
@@ -57,9 +76,12 @@ test("two clients: steps reach the client they name, and each client is recorded
     assert.ok(m.backend.capabilities.includes("client.multi"));
     // a, b and the duplicated tab c each have a video
     for (const c of ["a", "b", "c"]) {
-      const video = join(dir, `session.${c}.webm`);
+      const video = join(dir, `session.${c}.mkv`);
       assert.ok(statSync(video).size > 1_000, video);
       assert.deepEqual([...readFileSync(video).subarray(0, 4)], [0x1a, 0x45, 0xdf, 0xa3]);
+      const v = JSON.parse(readFileSync(join(dir, `session.${c}.video.json`), "utf8"));
+      assert.equal(v.client, c);
+      assert.equal(v.leadMs, v.recordingStartedAt - v.videoStartedAt);
     }
     assert.deepEqual(m.steps.slice(0, 2).map((s: any) => s.client), ["b", "a"]);
   } finally {
@@ -82,7 +104,7 @@ test("a failing run leaves its recording under the build directory", { timeout: 
     assert.equal(m.outcome, "failed");
     assert.equal(m.runId, runs[0]);
     for (const f of ["steps/1-state.json", "steps/1-key.png", "steps/2-state.json", "failure/observation.json",
-      "failure/surface.png", "failure/backend.log", "session.webm"]) {
+      "failure/surface.png", "failure/backend.log", "session.mkv"]) {
       assert.ok(existsSync(join(dir, f)), f);
     }
   } finally {

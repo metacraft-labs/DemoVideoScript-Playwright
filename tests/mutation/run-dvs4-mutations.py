@@ -16,6 +16,7 @@ ROOT = Path(__file__).resolve().parents[2]
 S = "src/surface.ts"
 A = "src/arm.ts"
 P = "src/protocol.ts"
+R = "src/recorder.ts"
 
 ARMS = [
     Arm("P1", S, "      } else if (pool.length > 1) {", "      } else if (false) {",
@@ -33,6 +34,8 @@ ARMS = [
     Arm("P6b", A, "    while (Date.now() < deadline) {\n      await sleep(60);",
         "    return true;\n    while (Date.now() < deadline) {\n      await sleep(60);",
         "settled reported at once"),
+    Arm("P7", R, "    while (this.written < slot) {", "    if (this.written < slot) {",
+        "a recorded frame shown once, however long it stayed on screen: the video shorter than the run"),
 ]
 
 if __name__ == "__main__":

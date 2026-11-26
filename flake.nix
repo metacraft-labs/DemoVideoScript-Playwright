@@ -108,6 +108,8 @@
               prettier
               prek
               uv
+              # the arm encodes its recordings (src/recorder.ts); the tests decode them
+              ffmpeg
             ];
             # Playwright and the browsers it drives come from the same nixpkgs,
             # so their versions match; `just setup` links them into node_modules.
@@ -133,6 +135,7 @@
               cat > $out/bin/dvs-playwright <<SH
               #!${pkgs.runtimeShell}
               export PLAYWRIGHT_BROWSERS_PATH=${pkgs.playwright-driver.browsers}
+              export FFMPEG_BIN=\''${FFMPEG_BIN:-${pkgs.ffmpeg}/bin/ffmpeg}
               exec ${pkgs.nodejs}/bin/node $out/lib/src/main.ts "\$@"
               SH
               chmod +x $out/bin/dvs-playwright

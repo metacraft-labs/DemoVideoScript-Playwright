@@ -10,8 +10,9 @@
 // enforces that on the send path); stages and reads may inject scripts, reads
 // may not change the application (the runner probes for it).
 import type { Browser, BrowserContext, Page } from "playwright-core";
-import { copyFileSync, mkdirSync, writeFileSync } from "node:fs";
+import { mkdirSync, renameSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
+import { PageRecorder } from "./recorder.ts";
 import { BackendError, hit, readNode, SurfaceIndex } from "./surface.ts";
 import type { SurfaceNode } from "./surface.ts";
 import type { Locator } from "./protocol.ts";
@@ -24,10 +25,15 @@ export interface ArmContext {
   page: Page | undefined;
   base: string;
   state: Record<string, unknown>;
+  /**
+   * Where a binding that also records with Playwright's own `recordVideo`
+   * keeps it, and when that video began (epoch ms). The arm does not use
+   * Playwright's video: it records every page itself while a recording runs
+   * (src/recorder.ts), so these are only the binding's.
+   */
   videoDir: string;
-  /** When the page's video began (epoch ms): Playwright starts it as the page is created. */
   videoStartedAt: number;
-  /** Opens the application's page: a new context that records video. */
+  /** Opens the application's page, in a new browser context. */
   open(url: string, init?: { script?: string | ((arg: any) => void); arg?: unknown; width?: number; height?: number }): Promise<Page>;
 }
 
@@ -44,9 +50,9 @@ export interface Binding {
   /**
    * Closes what the binding's stages started, when that is not a page the arm
    * opened (an Electron application started with Playwright's Electron
-   * driver, say). Called when a recording stops — so the page's video is
-   * complete before it is copied — and when the arm shuts down. Without it
-   * the arm closes the browser context it opened.
+   * driver, say). Called when a recording stops, after the arm has finished
+   * recording its pages, and when the arm shuts down. Without it the arm
+   * closes the browser context it opened.
    */
   close?(ctx: ArmContext): Promise<void>;
   /**
@@ -71,7 +77,6 @@ export interface Binding {
 interface Client {
   page: Page;
   context: BrowserContext | undefined;
-  videoStartedAt: number;
   /** A context the arm opened for this client, closed with it. */
   ownContext: boolean;
 }
@@ -146,13 +151,8 @@ export class Arm {
         self.ctx.browser ??= await self.chromium.launch();
         const width = init?.width ?? 1024;
         const height = init?.height ?? 600;
-        self.ctx.videoDir = join(process.env.TMPDIR ?? "/tmp", `dvs-pw-video-${process.pid}-${Date.now()}`);
-        self.ctx.context = await self.ctx.browser!.newContext({
-          viewport: { width, height },
-          recordVideo: { dir: self.ctx.videoDir, size: { width, height } },
-        });
+        self.ctx.context = await self.ctx.browser!.newContext({ viewport: { width, height } });
         const page = await self.ctx.context.newPage();
-        self.ctx.videoStartedAt = Date.now();
         // on the context, so every page of the application gets it: a second
         // tab (a shared client, a duplicated one) as well as the first
         if (init?.script) await self.ctx.context.addInitScript(init.script as any, init.arg);
@@ -409,8 +409,8 @@ export class Arm {
     switch (req.op) {
       case "adopt":
         this.stageContext = this.ctx.context;
-        this.clients.set(name, { page: this.page(), context: this.ctx.context,
-                                 videoStartedAt: this.ctx.videoStartedAt, ownContext: false });
+        this.clients.set(name, { page: this.page(), context: this.ctx.context, ownContext: false });
+        await this.recordPage(this.page());
         return;
       case "open": {
         const isolation = req.isolation === "shared" ? "shared" : "separate";
@@ -426,15 +426,14 @@ export class Arm {
           } else {
             this.ctx.browser ??= await this.chromium.launch();
             const vp = this.page().viewportSize() ?? { width: 1024, height: 600 };
-            const context = await this.ctx.browser!.newContext({
-              viewport: vp, recordVideo: { dir: this.ctx.videoDir || join(process.env.TMPDIR ?? "/tmp",
-                `dvs-pw-video-${process.pid}-${Date.now()}`), size: vp } });
+            const context = await this.ctx.browser!.newContext({ viewport: vp });
             page = await context.newPage();
             ownContext = true;
           }
           await page.goto(url, OPEN_WAIT);
         }
-        this.clients.set(name, { page, context: page.context(), videoStartedAt: Date.now(), ownContext });
+        this.clients.set(name, { page, context: page.context(), ownContext });
+        await this.recordPage(page);
         return;
       }
       case "duplicate": {
@@ -457,7 +456,8 @@ export class Arm {
           }
         }, storage);
         await page.goto(from.page.url(), OPEN_WAIT);
-        this.clients.set(name, { page, context: page.context(), videoStartedAt: Date.now(), ownContext: false });
+        this.clients.set(name, { page, context: page.context(), ownContext: false });
+        await this.recordPage(page);
         return;
       }
       case "select": {
@@ -478,7 +478,12 @@ export class Arm {
         const c = this.use(name);
         this.clients.delete(name);
         if (this.ctx.page === c.page) this.ctx.page = undefined;
-        this.closedVideos.push({ name, client: c, video: c.page.video() });
+        const recorder = this.recorders.get(c.page);
+        if (recorder) {
+          this.recorders.delete(c.page);
+          await recorder.stop();
+          this.closedVideos.push({ name, recorder });
+        }
         await c.page.close().catch(() => {});
         if (c.ownContext) await c.context?.close().catch(() => {});
         this.idx.clear();
@@ -489,43 +494,68 @@ export class Arm {
   }
 
   private stageContext: BrowserContext | undefined;
-  private closedVideos: Array<{ name: string; client: Client; video: ReturnType<Page["video"]> }> = [];
+  /** The pages being recorded now, and the recordings of clients closed meanwhile. */
+  private recorders = new Map<Page, PageRecorder>();
+  private closedVideos: Array<{ name: string; recorder: PageRecorder }> = [];
 
-  /**
-   * Each client's video, as session.<client>.webm with its own timing file.
-   * A page's video is complete only once the page has closed, so every client
-   * closes first (the application the stage started last, by its own close).
-   */
+  /** While a recording runs, every page of the application is recorded. */
+  private async recordPage(page: Page): Promise<void> {
+    const rec = this.recording;
+    if (!rec || this.recorders.has(page)) return;
+    const file = join(rec.dir, `recording-${this.recorders.size + this.closedVideos.length}.mkv`);
+    this.recorders.set(page, await PageRecorder.start(page, file));
+  }
+
+  /** Finishes a recording as `<base>.mkv`, with its timing file `<base>.video.json`. */
+  private finish(rec: { dir: string; startedAt: number }, recorder: PageRecorder, base: string,
+                 extra: Record<string, unknown> = {}): string {
+    const out = join(rec.dir, `${base}.mkv`);
+    renameSync(recorder.file, out);
+    // `leadMs` is how far into the video the recording began, so a step's
+    // offset in the video is leadMs + (its startMs - recordingStartMs); a
+    // client opened after the recording began has a negative one
+    writeFileSync(join(rec.dir, `${base}.video.json`),
+      JSON.stringify({ ...extra, videoStartedAt: recorder.startedAt, recordingStartedAt: rec.startedAt,
+                       leadMs: rec.startedAt - recorder.startedAt }) + "\n");
+    return out;
+  }
+
+  /** Each client's video, as session.<client>.mkv with its own timing file. */
   private async clientVideos(rec: { dir: string; startedAt: number }): Promise<string[]> {
-    const all = [...this.clients.entries()].map(([name, client]) => ({ name, client, video: client.page.video() }));
+    const all = [...this.clients.entries()];
+    const files: string[] = [];
+    const done: Array<{ name: string; recorder: PageRecorder }> = [];
+    for (const [name, client] of all) {
+      const recorder = this.recorders.get(client.page);
+      if (!recorder) continue;
+      this.recorders.delete(client.page);
+      await recorder.stop();
+      done.push({ name, recorder });
+    }
     const stagePage = this.ctx.page;
-    for (const c of all) {
-      if (c.client.ownContext) await c.client.context?.close().catch(() => {});
-      else if (c.client.page !== stagePage) await c.client.page.close().catch(() => {});
+    for (const [, c] of all) {
+      if (c.ownContext) await c.context?.close().catch(() => {});
+      else if (c.page !== stagePage) await c.page.close().catch(() => {});
     }
     await this.closeApplication();
-    const files: string[] = [];
-    mkdirSync(rec.dir, { recursive: true });
-    for (const { name, client, video } of [...all, ...this.closedVideos]) {
-      if (!video) continue;
-      const source = await video.path().catch(() => "");
-      if (!source) continue;
-      const out = join(rec.dir, `session.${name}.webm`);
-      try { copyFileSync(source, out); } catch { continue; }
-      writeFileSync(join(rec.dir, `session.${name}.video.json`),
-        JSON.stringify({ client: name, videoStartedAt: client.videoStartedAt,
-                         recordingStartedAt: rec.startedAt,
-                         leadMs: rec.startedAt - client.videoStartedAt }) + "\n");
-      files.push(out);
+    for (const { name, recorder } of [...done, ...this.closedVideos]) {
+      files.push(this.finish(rec, recorder, `session.${name}`, { client: name }));
     }
+    this.closedVideos = [];
     return files;
   }
 
   private async record(req: any): Promise<{ files: string[] }> {
     switch (req.op) {
-      case "start":
+      case "start": {
         this.recording = { dir: req.dir, startedAt: Date.now() };
+        mkdirSync(req.dir, { recursive: true });
+        // the application's pages open now: the stage's, and any client's
+        const pages = new Set<Page>([...this.clients.values()].map((c) => c.page));
+        if (this.ctx.page) pages.add(this.ctx.page);
+        for (const page of pages) await this.recordPage(page);
         return { files: [] };
+      }
       case "mark":
         return { files: [] };
       case "still": {
@@ -546,24 +576,16 @@ export class Arm {
           this.ctx.page = undefined;
           return { files };
         }
+        const recorder = this.ctx.page ? this.recorders.get(this.ctx.page) : undefined;
+        if (recorder) {
+          this.recorders.delete(this.ctx.page!);
+          await recorder.stop();
+        }
         if (!rec || !this.ctx.page) return { files: [] };
-        const video = this.ctx.page.video();
         await this.closeApplication();
         this.ctx.page = undefined;
-        if (!video) return { files: [] };
-        const source = await video.path();
-        const out = join(rec.dir, "session.webm");
-        mkdirSync(rec.dir, { recursive: true });
-        copyFileSync(source, out);
-        // the video starts when the application's page was opened, before the
-        // steps: `leadMs` is how far into the video the recording began, so a
-        // step's offset in the video is leadMs + (its startMs - recordingStartMs)
-        writeFileSync(join(rec.dir, "session.video.json"),
-          JSON.stringify({ note: "the video starts when the application was opened, before the steps",
-                           videoStartedAt: this.ctx.videoStartedAt,
-                           recordingStartedAt: rec.startedAt,
-                           leadMs: rec.startedAt - this.ctx.videoStartedAt }) + "\n");
-        return { files: [out] };
+        if (!recorder) return { files: [] };
+        return { files: [this.finish(rec, recorder, "session")] };
       }
     }
     throw new BackendError("protocol", `unknown record op '${req.op}'`);
@@ -580,6 +602,9 @@ export class Arm {
   }
 
   async close(): Promise<void> {
+    // a recording still running when the arm shuts down is abandoned
+    for (const r of this.recorders.values()) await r.stop().catch(() => {});
+    this.recorders.clear();
     for (const c of this.clients.values()) {
       if (c.ownContext) await c.context?.close().catch(() => {});
     }
