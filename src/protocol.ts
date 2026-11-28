@@ -70,6 +70,8 @@ export type ResponseAwait = {
   "id": number;
   "ok": true;
   "met": boolean;
+  "progress"?: boolean;
+  "reason"?: string;
 };
 
 export type ResponseResolveChord = {

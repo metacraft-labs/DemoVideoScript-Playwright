@@ -110,12 +110,15 @@
               uv
               # the arm encodes its recordings (src/recorder.ts); the tests decode them
               ffmpeg
+              # the Electron recording test: an Electron, and a display for it
+              xvfb-run
             ];
             # Playwright and the browsers it drives come from the same nixpkgs,
             # so their versions match; `just setup` links them into node_modules.
             PLAYWRIGHT_BROWSERS_PATH = "${pkgs.playwright-driver.browsers}";
             PLAYWRIGHT_SKIP_VALIDATE_HOST_REQUIREMENTS = "true";
             DVS_PLAYWRIGHT_CORE = "${pkgs.playwright-driver}";
+            ELECTRON_BIN = "${pkgs.electron}/bin/electron";
             DVS_TYPES_NODE = "${typesNode}";
             DVS_UNDICI_TYPES = "${undiciTypes}";
             shellHook = ''

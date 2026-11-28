@@ -1,0 +1,8 @@
+scenario: 1
+name: playwright/slow-settle
+pack: slow
+stage:
+  - use: launch-slow-settle
+steps:
+  - key: x
+  - expect: { at: screen, text: done }

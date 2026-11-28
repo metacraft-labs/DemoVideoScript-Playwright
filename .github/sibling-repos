@@ -1,4 +1,4 @@
 # DemoVideoScript provides the runner the arm is qualified through, the
 # protocol schema its types are generated from, and the conformance
 # application; pinned to an exact commit.
-DemoVideoScript=b2dd47d345794d53966102b7ee151e46f7d52daf  # DemoVideoScript@agents: a client action that loads a page can skip settled
+DemoVideoScript=e820c78f2a81c6d044ba2cfeafdef85aae1918fd  # DemoVideoScript@agents: a settle that reaches its cap says what the backend last saw

@@ -36,6 +36,8 @@ ARMS = [
         "settled reported at once"),
     Arm("P7", R, "    while (this.written < slot) {", "    if (this.written < slot) {",
         "a recorded frame shown once, however long it stayed on screen: the video shorter than the run"),
+    Arm("P8", A, "    return this.lastChange > 0 && Date.now() - this.lastChange < PROGRESS_WINDOW_MS;",
+        "    return false;", "a page still redrawing at the settle timeout reported as not progressing"),
 ]
 
 if __name__ == "__main__":

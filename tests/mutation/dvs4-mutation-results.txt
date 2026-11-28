@@ -1,37 +1,41 @@
-# dvs4 mutation results — 2026-11-26 13:47:38 +0200
+# dvs4 mutation results — 2026-11-28 13:25:35 +0200
 # kill command: bash -c just lint-types lint-input-rule && just build test-arm && just test-conformance test-protocol
 
-KILLED   P1      605.3s  a locator resolving the first of several candidates instead of reporting ambiguity
+KILLED   P1       88.4s  a locator resolving the first of several candidates instead of reporting ambiguity
            | cp ../DemoVideoScript/conformance/app/web/index.html $BUILD_DIR/web/index.html
            | DVS_NOTES_WEB=$BUILD_DIR/web DVS_BIN=$BUILD_DIR/bin/dvs DVS_ROOT=../DemoVideoScript node --test tests/*.test.ts
            | error: Recipe `test-arm` failed on line 52 with exit code 1
-KILLED   P2     1573.0s  a click's modifiers dropped
+KILLED   P2      196.0s  a click's modifiers dropped
            | DVS_NOTES_WEB=$BUILD_DIR/web DVS_BIN=$BUILD_DIR/bin/dvs DVS_ROOT=../DemoVideoScript node --test tests/*.test.ts
            | DVS_NOTES_WEB=$BUILD_DIR/web $BUILD_DIR/bin/dvs conformance --pack ../DemoVideoScript/conformance/pack/notes-app.pack.yaml --backend "cmd:node ../DemoVideoScrip
            | error: Recipe `test-conformance` failed on line 45 with exit code 1
-KILLED   P3      184.8s  a stale read: the page is not re-read
+KILLED   P3       79.5s  a stale read: the page is not re-read
            | cp ../DemoVideoScript/conformance/app/web/index.html $BUILD_DIR/web/index.html
            | DVS_NOTES_WEB=$BUILD_DIR/web DVS_BIN=$BUILD_DIR/bin/dvs DVS_ROOT=../DemoVideoScript node --test tests/*.test.ts
            | error: Recipe `test-arm` failed on line 52 with exit code 1
-KILLED   P4       33.4s  the protocol types drifting from the schema
+KILLED   P4        1.8s  the protocol types drifting from the schema
            | node scripts/gen-protocol-types.ts ../DemoVideoScript/schemas/v1/backend-protocol.schema.json --check
            | src/protocol.ts is stale: run scripts/gen-protocol-types.ts
            | error: Recipe `lint-types` failed on line 59 with exit code 1
-KILLED   P5       27.5s  script injection on the send path
+KILLED   P5        2.3s  script injection on the send path
            | node scripts/check-input-rule.ts
-           | script injection on the send path: line 227: await page.evaluate(() => 0);
+           | script injection on the send path: line 238: await page.evaluate(() => 0);
            | error: Recipe `lint-input-rule` failed on line 62 with exit code 1
-KILLED   P6      270.7s  settled after one quiet window: before the page stopped changing
+KILLED   P6       71.2s  settled after one quiet window: before the page stopped changing
            | cp ../DemoVideoScript/conformance/app/web/index.html $BUILD_DIR/web/index.html
            | DVS_NOTES_WEB=$BUILD_DIR/web DVS_BIN=$BUILD_DIR/bin/dvs DVS_ROOT=../DemoVideoScript node --test tests/*.test.ts
            | error: Recipe `test-arm` failed on line 52 with exit code 1
-KILLED   P6b     130.2s  settled reported at once
+KILLED   P6b      99.0s  settled reported at once
            | cp ../DemoVideoScript/conformance/app/web/index.html $BUILD_DIR/web/index.html
            | DVS_NOTES_WEB=$BUILD_DIR/web DVS_BIN=$BUILD_DIR/bin/dvs DVS_ROOT=../DemoVideoScript node --test tests/*.test.ts
            | error: Recipe `test-arm` failed on line 52 with exit code 1
-KILLED   P7      290.5s  a recorded frame shown once, however long it stayed on screen: the video shorter than the run
+KILLED   P7       99.9s  a recorded frame shown once, however long it stayed on screen: the video shorter than the run
+           | cp ../DemoVideoScript/conformance/app/web/index.html $BUILD_DIR/web/index.html
+           | DVS_NOTES_WEB=$BUILD_DIR/web DVS_BIN=$BUILD_DIR/bin/dvs DVS_ROOT=../DemoVideoScript node --test tests/*.test.ts
+           | error: Recipe `test-arm` failed on line 52 with exit code 1
+KILLED   P8       91.1s  a page still redrawing at the settle timeout reported as not progressing
            | cp ../DemoVideoScript/conformance/app/web/index.html $BUILD_DIR/web/index.html
            | DVS_NOTES_WEB=$BUILD_DIR/web DVS_BIN=$BUILD_DIR/bin/dvs DVS_ROOT=../DemoVideoScript node --test tests/*.test.ts
            | error: Recipe `test-arm` failed on line 52 with exit code 1
 
-8/8 killed, 0 survived
+9/9 killed, 0 survived

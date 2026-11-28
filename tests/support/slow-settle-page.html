@@ -1,0 +1,20 @@
+<!doctype html>
+<html lang="en">
+  <head><meta charset="utf-8" /><title>Slow settle</title></head>
+  <body>
+    <!-- Answers a key by redrawing every 100 ms for 7 s, then shows "done":
+         a heavy redraw on a loaded machine, longer than one settle timeout. -->
+    <div id="text">ready</div>
+    <script>
+      const t = document.getElementById("text");
+      document.addEventListener("keydown", () => {
+        const start = Date.now();
+        const tick = setInterval(() => {
+          const ms = Date.now() - start;
+          if (ms >= 7000) { clearInterval(tick); t.textContent = "done"; }
+          else t.textContent = "drawing " + ms;
+        }, 100);
+      });
+    </script>
+  </body>
+</html>

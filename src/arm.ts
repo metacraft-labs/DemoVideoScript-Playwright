@@ -33,6 +33,13 @@ export interface ArmContext {
    */
   videoDir: string;
   videoStartedAt: number;
+  /**
+   * True: the arm records every page of the application itself while a
+   * recording runs, a page a binding opened (an Electron window) as well, so
+   * a binding has no need to ask Playwright for a video of its own. An older
+   * arm, which copied the page's Playwright video, leaves it unset.
+   */
+  readonly recordsPages: true;
   /** Opens the application's page, in a new browser context. */
   open(url: string, init?: { script?: string | ((arg: any) => void); arg?: unknown; width?: number; height?: number }): Promise<Page>;
 }
@@ -116,6 +123,9 @@ function pwChord(chord: string): string {
 // application in it is ready is the scenario's to wait for.
 const OPEN_WAIT = { waitUntil: "load" as const, timeout: 600_000 };
 
+/** A settled wait that saw the surface change this recently reports progress. */
+const PROGRESS_WINDOW_MS = 1000;
+
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, Math.max(0, ms)));
 
 function parseDuration(s: string): number {
@@ -147,6 +157,7 @@ export class Arm {
       browser: undefined, context: undefined, page: undefined, base: ".", state: {},
       videoDir: "",
       videoStartedAt: 0,
+      recordsPages: true,
       async open(url, init) {
         self.ctx.browser ??= await self.chromium.launch();
         const width = init?.width ?? 1024;
@@ -299,22 +310,39 @@ export class Arm {
   }
   // --- end send ---------------------------------------------------------------
 
+  /** When the surface last changed during a settled wait (epoch ms). */
+  private lastChange = 0;
+
   private async settled(timeoutMs: number): Promise<boolean> {
     // the page stopped changing: three reads of the surface, 60 ms apart,
     // agree (two consecutive quiet windows, as the terminal backend requires)
     const deadline = Date.now() + timeoutMs;
     let last = JSON.stringify(await this.binding.surface(this.ctx));
     let quiet = 0;
+    this.lastChange = 0;
     while (Date.now() < deadline) {
       await sleep(60);
       const now = JSON.stringify(await this.binding.surface(this.ctx));
       if (now === last) {
         quiet++;
         if (quiet >= 2) return true;
-      } else quiet = 0;
+      } else {
+        quiet = 0;
+        this.lastChange = Date.now();
+      }
       last = now;
     }
     return false;
+  }
+
+  /**
+   * Not settled, but still changing when the wait ended: the surface changed
+   * within the last second of it. The runner then waits on, up to its settle
+   * cap, instead of failing a page that is still drawing (a heavy redraw on a
+   * loaded host takes longer than one settle timeout).
+   */
+  private stillChanging(): boolean {
+    return this.lastChange > 0 && Date.now() - this.lastChange < PROGRESS_WINDOW_MS;
   }
 
   async handle(req: any): Promise<Record<string, unknown>> {
@@ -359,7 +387,15 @@ export class Arm {
         return {};
       case "await": {
         if (this.defect === "early-sync") return { met: true };
-        if (req.condition === "settled") return { met: await this.settled(req.timeoutMs) };
+        if (req.condition === "settled") {
+          if (await this.settled(req.timeoutMs)) return { met: true };
+          if (!this.stillChanging()) return { met: false };
+          return {
+            met: false,
+            progress: true,
+            reason: `the page was still changing: it last changed ${Date.now() - this.lastChange} ms before the wait ended`,
+          };
+        }
         const deadline = Date.now() + req.timeoutMs;
         for (;;) {
           const met = await this.binding.condition(this.ctx, req.condition);

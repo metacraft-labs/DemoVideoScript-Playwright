@@ -7,3 +7,4 @@ roles:
 stages:
   launch-slow: ~
   launch-slow-load: ~
+  launch-slow-settle: ~

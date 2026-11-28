@@ -194,3 +194,57 @@ test("the protocol types are the schema's: a changed schema makes them stale", {
     rmSync(dir, { recursive: true, force: true });
   }
 });
+
+// An Electron application's window, launched by the binding with Playwright's
+// Electron driver (the arm did not open it), is recorded by the arm like a page
+// it opened: lossless, at the window's own size, for the whole run. Electron
+// needs a display: the run goes under xvfb-run when there is none.
+test("an Electron window the binding launched is recorded for the whole run", { timeout: 600_000 }, () => {
+  const dir = mkdtempSync(join(tmpdir(), "dvs-pw-electron-"));
+  try {
+    const electronArm = `cmd:node ${join(root, "src/main.ts")} --binding ${join(root, "tests/support/electron-binding.ts")}`;
+    const args = ["run", join(root, "tests/scenarios/slow-redraw.yaml"), "--pack",
+      join(root, "tests/support/slow.pack.yaml"), "--backend", electronArm, "--record", "always", "--out", dir];
+    const r = process.env.DISPLAY
+      ? spawnSync(dvs, args, { encoding: "utf8", timeout: 600_000 })
+      : spawnSync("xvfb-run", ["-a", "-s", "-screen 0 1280x800x24", dvs, ...args], { encoding: "utf8", timeout: 600_000 });
+    assert.equal(r.status, 0, r.stdout + r.stderr);
+    const video = join(dir, "session.mkv");
+    const m = JSON.parse(readFileSync(join(dir, "manifest.json"), "utf8"));
+    assert.deepEqual(m.media, [video]);
+    const [codec, w, h, pix] = probe(video, "stream=codec_name,width,height,pix_fmt").split(",");
+    assert.equal(`${codec},${pix}`, "h264,gbrp");
+    // the window's size: a screenshot of the page at the end of the run is the same size
+    const still = join(dir, "steps", `${m.steps.at(-1).index}-${m.steps.at(-1).kind}.png`);
+    const [sw, sh] = probe(still, "stream=width,height").split(",");
+    assert.deepEqual([w, h], [sw, sh]);
+    const v = JSON.parse(readFileSync(join(dir, "session.video.json"), "utf8"));
+    const duration = Number(probe(video, "format=duration")) * 1000;
+    const lastInVideo = v.leadMs + (Math.max(...m.steps.map((s: any) => s.endMs)) - m.recordingStartMs);
+    assert.ok(duration >= lastInVideo - 100 && duration <= lastInVideo + 10_000,
+      `video ${duration} ms, last step ends at ${lastInVideo} ms`);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+// A page that keeps redrawing for 7 s after a key, longer than the settle
+// timeout after an input: the arm reports it still changing (progress), so
+// the runner waits on and the step passes. Without the report the settle
+// fails at its timeout ("did not settle").
+test("a page still redrawing past the settle timeout is waited for, not failed", { timeout: 300_000 }, () => {
+  const slowArm = `cmd:node ${join(root, "src/main.ts")} --binding ${join(root, "tests/support/slow-binding.ts")}`;
+  const r = run(["run", join(root, "tests/scenarios/slow-settle.yaml"), "--pack",
+    join(root, "tests/support/slow.pack.yaml"), "--backend", slowArm, "--record", "off"]);
+  assert.equal(r.status, 0, r.stdout + r.stderr);
+});
+
+// At the runner's settle cap the step fails, and says why: the arm's reason
+// (the page was still changing, and how recently) is in the failure.
+test("a page still redrawing at the settle cap fails with the arm's reason", { timeout: 300_000 }, () => {
+  const slowArm = `cmd:node ${join(root, "src/main.ts")} --binding ${join(root, "tests/support/slow-binding.ts")}`;
+  const r = run(["run", join(root, "tests/scenarios/slow-settle.yaml"), "--pack",
+    join(root, "tests/support/slow.pack.yaml"), "--backend", slowArm, "--record", "off", "--settle-cap", "3000"]);
+  assert.notEqual(r.status, 0, r.stdout + r.stderr);
+  assert.match(r.stdout + r.stderr, /the page was still changing: it last changed \d+ ms before the wait ended/);
+});

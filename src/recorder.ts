@@ -37,6 +37,7 @@ export class PageRecorder {
   private written = 0;
   private stopped = false;
   private broken = "";
+  private timer: ReturnType<typeof setInterval> | undefined;
 
   private fps: number;
 
@@ -59,10 +60,20 @@ export class PageRecorder {
     const startedAt = Date.now();
     const ff = spawn(process.env.FFMPEG_BIN ?? "ffmpeg", [
       "-hide_banner", "-loglevel", "error", "-nostdin", "-y",
+      // no probing: the input is known, and probing would hold back the
+      // first megabytes of frames instead of encoding them as they come
+      "-probesize", "32", "-analyzeduration", "0",
       "-f", "image2pipe", "-framerate", String(fps), "-c:v", "png", "-i", "pipe:0",
       // lossless RGB: the recording is the source of a video, not the video;
       // the composition's one final encode is the only lossy one
       "-c:v", "libx264rgb", "-qp", "0", "-preset", "ultrafast", "-bf", "0", "-pix_fmt", "rgb24",
+      // a few encoder threads: x264 holds back as many frames as it has
+      // threads, and on a many-core host that kept every frame of a short
+      // recording out of the file until the stop
+      "-threads", "4",
+      // a cluster a second, written out at once: the file keeps up with the
+      // recording, and a run that dies keeps the video up to that second
+      "-flush_packets", "1", "-cluster_time_limit", "1000",
       "-f", "matroska", file,
     ], { stdio: ["pipe", "ignore", "pipe"] });
     const r = new PageRecorder(file, startedAt, ff, fps);
@@ -75,6 +86,10 @@ export class PageRecorder {
         r.frame(Buffer.from(e.data, "base64"), Date.now());
       });
       await r.cdp.send("Page.startScreencast", { format: "png", everyNthFrame: 1 });
+      // a page that does not repaint sends no frames: its last frame goes on
+      // into the file every second all the same
+      r.timer = setInterval(() => r.fill(Date.now()), 1000);
+      r.timer.unref();
     } catch (e) {
       await r.abort();
       throw new BackendError("internal", `recording the page: ${String((e as Error)?.message ?? e)}`);
@@ -105,6 +120,7 @@ export class PageRecorder {
     // the video ends now: a frame that arrives while the screencast stops is
     // after the end
     const at = Date.now();
+    clearInterval(this.timer);
     this.fill(at, true);
     this.stopped = true;
     await this.cdp?.send("Page.stopScreencast").catch(() => {});
@@ -119,6 +135,7 @@ export class PageRecorder {
   }
 
   private async abort(): Promise<void> {
+    clearInterval(this.timer);
     this.stopped = true;
     await this.cdp?.detach().catch(() => {});
     this.ff.stdin?.end();

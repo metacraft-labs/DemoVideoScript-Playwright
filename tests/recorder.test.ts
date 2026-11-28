@@ -5,7 +5,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdtempSync, rmSync, statSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { chromium } from "playwright-core";
@@ -36,16 +36,23 @@ const BUSY = `<body style="margin:0"><div id="n" style="font:40px monospace"></d
 const STILL = `<body style="margin:0;background:#fdf6e3"><p style="font:14px monospace;color:#268bd2">
   if (x &lt; 10) { return f(x) + g(y); }</p><div style="width:37px;height:11px;background:#d33682"></div></body>`;
 
-for (const [name, html] of [["repaints all the time", BUSY], ["never repaints", STILL]] as const) {
+// the frames so far are in the file while it records: a page that repaints
+// fills more than a kilobyte in 3 s; one that never does compresses to less,
+// but is in the file all the same
+for (const [name, html, soFar] of [["repaints all the time", BUSY, 1_000], ["never repaints", STILL, 0]] as const) {
   test(`a page that ${name} is recorded for as long as the recording ran`, { timeout: 120_000 }, async () => {
     const dir = mkdtempSync(join(tmpdir(), "dvs-pw-recorder-"));
     const browser = await chromium.launch();
+    let rec: PageRecorder | undefined;
     try {
       const page = await browser.newPage({ viewport: { width: 640, height: 360 } });
       await page.setContent(html);
       const file = join(dir, "page.mkv");
-      const rec = await PageRecorder.start(page, file);
+      rec = await PageRecorder.start(page, file);
       await sleep(3_000);
+      // encoded as it goes: the frames so far are in the file already
+      const size = statSync(file).size;
+      assert.ok(size > soFar, `${size} bytes in the file while recording`);
       const stoppedAt = Date.now();
       const written = await rec.stop();
       const wall = stoppedAt - rec.startedAt;
@@ -54,6 +61,7 @@ for (const [name, html] of [["repaints all the time", BUSY], ["never repaints", 
       const d = duration(file);
       assert.ok(Math.abs(d - wall) <= 2 * frame + 50, `the video is ${d} ms, the recording ${wall} ms`);
     } finally {
+      await rec?.stop().catch(() => {});
       await browser.close();
       rmSync(dir, { recursive: true, force: true });
     }

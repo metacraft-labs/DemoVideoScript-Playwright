@@ -21,6 +21,10 @@ const binding: Binding = {
       await ctx.open(pathToFileURL(join(import.meta.dirname, "slow-page.html")).href);
       return;
     }
+    if (use === "launch-slow-settle") {
+      await ctx.open(pathToFileURL(join(import.meta.dirname, "slow-settle-page.html")).href);
+      return;
+    }
     if (use !== "launch-slow-load") throw new Error(`no stage procedure '${use}'`);
     const delay = Number(process.env.DVS_PW_SLOW_LOAD_MS ?? 35_000);
     const html = readFileSync(join(import.meta.dirname, "slow-page.html"), "utf8")
